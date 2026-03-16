@@ -146,17 +146,24 @@ def setup_notification() -> dict:
     ])
 
     cfg = {"type": ntype}
-    cfg["webhook_url"] = ask(f"  {ntype.capitalize()} webhook URL")
 
     if ntype == "slack":
-        bot = ask("  Slack bot token (for commands, optional)", "")
+        print(c("  Webhook URL → slack.com/apps → Incoming WebHooks → Add to Slack → select channel", "yellow"))
+        cfg["webhook_url"] = ask("  Slack webhook URL")
+        cfg["channel"] = ask("  Channel name", "self-notifications")
+        print()
+        print("  Bot token enables two-way commands (!get, !list etc.)")
+        print(c("  Bot token → api.slack.com/apps → Create App → OAuth & Permissions → Bot Token (xoxb-...)", "yellow"))
+        bot = ask("  Slack bot token (optional, press Enter to skip)", "")
         if bot:
             cfg["bot_token"] = bot
-        cfg["channel"] = ask("  Channel name", "self-notifications")
-        signing = ask("  Slack signing secret (optional)", "")
-        if signing:
-            cfg["signing_secret"] = signing
+            print(c("  Signing secret → api.slack.com/apps → Basic Information → Signing Secret", "yellow"))
+            signing = ask("  Slack signing secret (optional)", "")
+            if signing:
+                cfg["signing_secret"] = signing
     else:
+        print(c("  Webhook URL → Discord server → Edit Channel → Integrations → Webhooks → New Webhook", "yellow"))
+        cfg["webhook_url"] = ask("  Discord webhook URL")
         cfg["channel"] = ask("  Channel ID or name", "")
 
     return cfg
@@ -172,8 +179,12 @@ def setup_ai() -> dict:
 
     cfg = {"provider": provider}
 
-    if provider in ("claude", "openai"):
-        cfg["api_key"] = ask(f"  {provider.capitalize()} API key")
+    if provider == "claude":
+        print(c("  → console.anthropic.com → API Keys → Create Key", "yellow"))
+        cfg["api_key"] = ask("  Claude API key")
+    elif provider == "openai":
+        print(c("  → platform.openai.com → API keys → Create new secret key", "yellow"))
+        cfg["api_key"] = ask("  OpenAI API key")
     elif provider == "ollama":
         print()
         print("  Ollama runs locally inside Docker — no GPU required.")
