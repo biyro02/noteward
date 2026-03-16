@@ -384,7 +384,7 @@ def deploy_server(notes_dir: Path, server_cfg: dict, master_password: str, recov
     ai_cfg = config.get("ai", {})
     use_ollama = ai_cfg.get("provider") == "ollama"
     ollama_model = ai_cfg.get("ollama_model", "llama3.2:1b")
-    profile_flag = ["--profile", "ollama"] if use_ollama else []
+    profile_flag = ["--profile", "ollama"] if use_ollama else ["--profile", "default"]
     env_flag = ["-e", f"OLLAMA_MODEL={ollama_model}"] if use_ollama else []
 
     if mode == "local":
