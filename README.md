@@ -25,13 +25,13 @@ Your notes folder
 
 ## Quick Start
 
-**Requirements:** Python 3.8+, Docker
+**Requirements:** Python 3.8+
 
 ```bash
-git clone https://github.com/biyro02/noteward
-cd noteward
-python install.py
+curl -fsSL https://raw.githubusercontent.com/biyro02/noteward/main/install.py | python3
 ```
+
+That's it. The installer handles everything else (including Docker if missing).
 
 The installer will ask you:
 1. Which folder to watch
