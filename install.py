@@ -17,6 +17,9 @@ from pathlib import Path
 MIN_PYTHON = (3, 8)
 REQUIRED_PACKAGES = ["cryptography", "pyyaml", "watchdog"]
 
+REPO_URL = "https://github.com/Uruba-Software/noteward"
+REPO_RAW  = "https://raw.githubusercontent.com/Uruba-Software/noteward/main"
+
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -350,16 +353,33 @@ def write_config(notes_dir: Path, config: dict) -> Path:
     return config_file
 
 
-def copy_watcher(notes_dir: Path) -> None:
-    src = Path(__file__).parent / "watcher.py"
+def bootstrap_repo() -> Path:
+    """Return path to repo root. Downloads from GitHub if files are missing (e.g. run from /tmp)."""
+    base = Path(__file__).parent
+    if (base / "watcher.py").exists() and (base / "server").exists():
+        return base
+
+    import tempfile, zipfile, urllib.request
+    print("  Downloading Noteward files...")
+    tmp = Path(tempfile.mkdtemp(prefix="noteward_"))
+    zip_path = tmp / "repo.zip"
+    urllib.request.urlretrieve(f"{REPO_URL}/archive/refs/heads/main.zip", zip_path)
+    with zipfile.ZipFile(zip_path) as z:
+        z.extractall(tmp)
+    ok("Files downloaded.")
+    return tmp / "noteward-main"
+
+
+def copy_watcher(notes_dir: Path, repo_dir: Path) -> None:
+    src = repo_dir / "watcher.py"
     dst = notes_dir / "watcher.py"
     shutil.copy2(src, dst)
     ok(f"watcher.py copied to: {dst}")
 
 
-def deploy_server(notes_dir: Path, server_cfg: dict, master_password: str, recovery_b64: str, config: dict = {}) -> None:
+def deploy_server(notes_dir: Path, server_cfg: dict, master_password: str, recovery_b64: str, config: dict = {}, repo_dir: Path = None) -> None:
     mode = server_cfg.get("mode")
-    compose_dir = Path(__file__).parent / "server"
+    compose_dir = (repo_dir if repo_dir else Path(__file__).parent) / "server"
 
     ai_cfg = config.get("ai", {})
     use_ollama = ai_cfg.get("provider") == "ollama"
@@ -445,6 +465,7 @@ def main():
     check_python()
     install_packages()
 
+    repo_dir = bootstrap_repo()
     notes_dir = setup_notes_dir()
     server_cfg = setup_server(notes_dir)
     notification_cfg = setup_notification()
@@ -466,10 +487,10 @@ def main():
     }
 
     write_config(notes_dir, config)
-    copy_watcher(notes_dir)
+    copy_watcher(notes_dir, repo_dir)
 
     if check_docker():
-        deploy_server(notes_dir, server_cfg, master_password, recovery_b64, config)
+        deploy_server(notes_dir, server_cfg, master_password, recovery_b64, config, repo_dir)
     else:
         warn("Docker not found. Install Docker and run 'python install.py --deploy-only'.")
 
