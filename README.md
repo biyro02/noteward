@@ -28,7 +28,7 @@ Your notes folder
 **Requirements:** Python 3.8+
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/biyro02/noteward/main/install.py | python3
+curl -fsSL https://raw.githubusercontent.com/Uruba-Software/noteward/main/install.py -o /tmp/nw-install.py && python3 /tmp/nw-install.py
 ```
 
 That's it. The installer handles everything else (including Docker if missing).
