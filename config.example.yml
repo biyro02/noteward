@@ -1,0 +1,63 @@
+# Noteward Configuration
+# Copy this file to config.yml and fill in your values.
+# API keys and secrets can be referenced as [secret:name] — stored encrypted.
+
+# ── Notes Directory ───────────────────────────────────────────────────────────
+notes_dir: ~/Documents   # Absolute or ~ path. watcher.py lives here.
+
+# ── Server ────────────────────────────────────────────────────────────────────
+server:
+  mode: remote           # "remote" (VPS/Hetzner) or "local" (Docker on this machine)
+  host: ""               # Remote only: IP or hostname
+  ssh_key: ~/.ssh/id_rsa # Remote only: SSH private key path
+  port: 8765             # API port (must match Dockerfile EXPOSE)
+  secret: ""             # Shared secret between watcher and server (auto-generated on install)
+
+# ── Notifications ─────────────────────────────────────────────────────────────
+notification:
+  type: slack            # "slack" or "discord"
+  webhook_url: ""        # Incoming webhook for outbound notifications
+  bot_token: ""          # Bot token for receiving commands (Slack: xoxb-..., Discord: bot token)
+  channel: ""            # Channel name or ID
+
+# ── AI Provider ───────────────────────────────────────────────────────────────
+ai:
+  provider: claude       # "claude", "openai", or "ollama"
+  model: ""              # Leave blank for provider default
+  api_key: ""            # Or use [secret:anthropic-api-key] etc.
+  ollama_host: http://localhost:11434  # Ollama only
+
+# ── Schedule ──────────────────────────────────────────────────────────────────
+schedule:
+  daily_summary: "11:00"          # 24h format, server local time
+  timezone: "Europe/Istanbul"
+  weekdays_only: true
+  open_ended_interval_days: 3     # How often to repeat undated tasks
+
+# ── Security ──────────────────────────────────────────────────────────────────
+security:
+  # Master password encrypts the data key on the server.
+  # Set once during install — never stored in this file.
+  # Recovery key is saved to: {notes_dir}/.noteward/recovery.key
+  max_failed_attempts: 3          # Lock bot after N wrong master password attempts
+  alert_on_secret_access: true    # Send Slack/Discord alert on every secret query
+
+# ── Sources ───────────────────────────────────────────────────────────────────
+# "files" is always active. Others are opt-in (future versions).
+sources:
+  - type: files   # Reads synced notes from notes_dir
+
+  # - type: github
+  #   token: [secret:github-token]
+  #   repos: []        # empty = all accessible repos
+  #   include: [issues, prs, mentions]
+
+  # - type: jira
+  #   url: https://yourorg.atlassian.net
+  #   token: [secret:jira-token]
+  #   email: you@example.com
+  #   project: ""      # empty = all assigned issues
+
+  # - type: email
+  #   provider: gmail  # "gmail" or "imap"
+  #   token: [secret:gmail-token]

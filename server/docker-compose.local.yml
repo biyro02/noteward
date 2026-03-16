@@ -1,0 +1,26 @@
+version: "3.9"
+
+# Local mode: server runs on the same machine as watcher.py
+# Notes are received via API — no volume mount to notes folder.
+
+services:
+  noteward:
+    build: .
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8765:8765"
+    volumes:
+      - noteward_data:/app/data
+    environment:
+      - NOTEWARD_CONFIG=/app/data/config.yml
+      - NOTEWARD_MODE=local
+    tmpfs:
+      - /dev/shm
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8765/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+volumes:
+  noteward_data:
