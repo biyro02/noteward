@@ -8,18 +8,71 @@ services:
     build: .
     restart: unless-stopped
     ports:
-      - "127.0.0.1:8765:8765"   # Bind to localhost only — use reverse proxy for HTTPS
+      - "127.0.0.1:8765:8765"
     volumes:
-      - noteward_data:/app/data  # Encrypted secrets + synced notes stored here
+      - noteward_data:/app/data
     environment:
       - NOTEWARD_CONFIG=/app/data/config.yml
     tmpfs:
-      - /dev/shm                 # RAM-only key storage
+      - /dev/shm
+    depends_on:
+      ollama:
+        condition: service_healthy
+    profiles: ["default", "ollama"]
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8765/health"]
       interval: 30s
       timeout: 5s
       retries: 3
 
+  # Ollama — only starts when ai.provider = ollama in config.
+  # CPU-only by default. Uncomment the deploy section for GPU support.
+  ollama:
+    image: ollama/ollama:latest
+    restart: unless-stopped
+    volumes:
+      - ollama_data:/root/.ollama    # models persist here
+    environment:
+      - OLLAMA_HOST=0.0.0.0
+    # ── GPU support (optional) ──────────────────────────────────────────────
+    # Uncomment if you have an NVIDIA GPU and nvidia-container-toolkit installed:
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: all
+    #           capabilities: [gpu]
+    # ────────────────────────────────────────────────────────────────────────
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:11434/api/tags"]
+      interval: 10s
+      timeout: 5s
+      retries: 12        # wait up to 2 min for model pull on first start
+      start_period: 30s
+    profiles: ["ollama"]
+
+  # Model puller — runs once, pulls the configured model, then exits.
+  ollama-pull:
+    image: ollama/ollama:latest
+    depends_on:
+      ollama:
+        condition: service_started
+    volumes:
+      - ollama_data:/root/.ollama
+    environment:
+      - OLLAMA_HOST=http://ollama:11434
+    entrypoint: >
+      sh -c "
+        echo 'Waiting for Ollama...';
+        until curl -sf http://ollama:11434/api/tags; do sleep 2; done;
+        echo 'Pulling model: ${OLLAMA_MODEL:-llama3.2:1b}';
+        ollama pull ${OLLAMA_MODEL:-llama3.2:1b};
+        echo 'Done.';
+      "
+    restart: "no"
+    profiles: ["ollama"]
+
 volumes:
   noteward_data:
+  ollama_data:

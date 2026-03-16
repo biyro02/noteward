@@ -175,8 +175,29 @@ def setup_ai() -> dict:
     if provider in ("claude", "openai"):
         cfg["api_key"] = ask(f"  {provider.capitalize()} API key")
     elif provider == "ollama":
-        cfg["ollama_host"] = ask("  Ollama host", "http://localhost:11434")
-        cfg["model"] = ask("  Model name", "llama3.2")
+        print()
+        print("  Ollama runs locally inside Docker — no GPU required.")
+        print("  Recommended CPU-friendly models:")
+        print("    [1] llama3.2:1b     (~800 MB, fastest)")
+        print("    [2] llama3.2:3b     (~2 GB, better quality)")
+        print("    [3] deepseek-r1:1.5b (~1 GB, good reasoning)")
+        print("    [4] qwen2.5:1.5b    (~1 GB, multilingual)")
+        print("    [5] Custom")
+        model_map = {
+            "1": "llama3.2:1b",
+            "2": "llama3.2:3b",
+            "3": "deepseek-r1:1.5b",
+            "4": "qwen2.5:1.5b",
+        }
+        choice = input("  Choice [1]: ").strip() or "1"
+        if choice in model_map:
+            cfg["model"] = model_map[choice]
+        else:
+            cfg["model"] = ask("  Model name (e.g. llama3.2:1b)", "llama3.2:1b")
+
+        cfg["ollama_host"] = "http://ollama:11434"  # Docker service name
+        cfg["ollama_model"] = cfg["model"]          # passed as OLLAMA_MODEL env
+        warn(f"Model '{cfg['model']}' will be downloaded on first server start.")
 
     return cfg
 
@@ -249,14 +270,23 @@ def copy_watcher(notes_dir: Path) -> None:
     ok(f"watcher.py copied to: {dst}")
 
 
-def deploy_server(notes_dir: Path, server_cfg: dict, master_password: str, recovery_b64: str) -> None:
+def deploy_server(notes_dir: Path, server_cfg: dict, master_password: str, recovery_b64: str, config: dict = {}) -> None:
     mode = server_cfg.get("mode")
     compose_dir = Path(__file__).parent / "server"
 
+    ai_cfg = config.get("ai", {})
+    use_ollama = ai_cfg.get("provider") == "ollama"
+    ollama_model = ai_cfg.get("ollama_model", "llama3.2:1b")
+    profile_flag = ["--profile", "ollama"] if use_ollama else []
+    env_flag = ["-e", f"OLLAMA_MODEL={ollama_model}"] if use_ollama else []
+
     if mode == "local":
         header("Starting local server (Docker)...")
-        run(["docker", "compose", "-f", str(compose_dir / "docker-compose.local.yml"),
-             "up", "-d", "--build"])
+        run(["docker", "compose", "-f", str(compose_dir / "docker-compose.local.yml")]
+            + profile_flag + ["up", "-d", "--build"] + env_flag)
+        if use_ollama:
+            ok(f"Ollama started. Pulling model '{ollama_model}' in background...")
+            warn("First run may take a few minutes while the model downloads.")
         ok("Local server started.")
 
     elif mode == "remote":
@@ -265,16 +295,17 @@ def deploy_server(notes_dir: Path, server_cfg: dict, master_password: str, recov
         ssh_key = server_cfg.get("ssh_key", "")
         ssh_opts = ["-i", ssh_key, "-o", "StrictHostKeyChecking=no"] if ssh_key else []
 
-        # Copy server files
         print("  Copying server files...")
         run(["rsync", "-az"] + (["-e", f"ssh -i {ssh_key}"] if ssh_key else []) +
             [str(compose_dir) + "/", f"root@{host}:/opt/noteward/"])
         ok("Files copied.")
 
-        # Start Docker on remote
         print("  Starting server on remote...")
-        run(["ssh"] + ssh_opts + [f"root@{host}",
-             "cd /opt/noteward && docker compose up -d --build"])
+        compose_cmd = f"cd /opt/noteward && OLLAMA_MODEL={ollama_model} docker compose " + \
+                      (" ".join(profile_flag)) + " up -d --build"
+        run(["ssh"] + ssh_opts + [f"root@{host}", compose_cmd])
+        if use_ollama:
+            warn(f"Model '{ollama_model}' is being pulled on remote. Check with: ssh root@{host} 'docker logs noteward-ollama-pull-1'")
         ok("Remote server started.")
 
     # Initialize master password on server
@@ -351,7 +382,7 @@ def main():
     copy_watcher(notes_dir)
 
     if check_docker():
-        deploy_server(notes_dir, server_cfg, master_password, recovery_b64)
+        deploy_server(notes_dir, server_cfg, master_password, recovery_b64, config)
     else:
         warn("Docker not found. Install Docker and run 'python install.py --deploy-only'.")
 

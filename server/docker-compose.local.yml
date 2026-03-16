@@ -14,13 +14,63 @@ services:
     environment:
       - NOTEWARD_CONFIG=/app/data/config.yml
       - NOTEWARD_MODE=local
+      - OLLAMA_HOST=http://ollama:11434
     tmpfs:
       - /dev/shm
+    depends_on:
+      ollama:
+        condition: service_healthy
+    profiles: ["default", "ollama"]
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8765/health"]
       interval: 30s
       timeout: 5s
       retries: 3
 
+  ollama:
+    image: ollama/ollama:latest
+    restart: unless-stopped
+    volumes:
+      - ollama_data:/root/.ollama
+    environment:
+      - OLLAMA_HOST=0.0.0.0
+    # ── GPU support (optional) ──────────────────────────────────────────────
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: all
+    #           capabilities: [gpu]
+    # ────────────────────────────────────────────────────────────────────────
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:11434/api/tags"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+    profiles: ["ollama"]
+
+  ollama-pull:
+    image: ollama/ollama:latest
+    depends_on:
+      ollama:
+        condition: service_started
+    volumes:
+      - ollama_data:/root/.ollama
+    environment:
+      - OLLAMA_HOST=http://ollama:11434
+    entrypoint: >
+      sh -c "
+        echo 'Waiting for Ollama...';
+        until curl -sf http://ollama:11434/api/tags; do sleep 2; done;
+        echo 'Pulling model: ${OLLAMA_MODEL:-llama3.2:1b}';
+        ollama pull ${OLLAMA_MODEL:-llama3.2:1b};
+        echo 'Done.';
+      "
+    restart: "no"
+    profiles: ["ollama"]
+
 volumes:
   noteward_data:
+  ollama_data:
