@@ -69,15 +69,50 @@ def check_python():
     ok(f"Python {sys.version_info.major}.{sys.version_info.minor}")
 
 
+def _ensure_pip():
+    """Make sure pip is available, bootstrap via get-pip.py if needed."""
+    # Ensure ~/.local/bin is in PATH (user-installed pip lives there)
+    local_bin = str(Path.home() / ".local" / "bin")
+    if local_bin not in os.environ.get("PATH", ""):
+        os.environ["PATH"] = local_bin + os.pathsep + os.environ.get("PATH", "")
+
+    result = run([sys.executable, "-m", "pip", "--version"], check=False, capture=True)
+    if result.returncode == 0:
+        return
+
+    print("  pip not found — bootstrapping...")
+    import urllib.request, tempfile
+    get_pip = tempfile.mktemp(suffix=".py")
+    urllib.request.urlretrieve("https://bootstrap.pypa.io/get-pip.py", get_pip)
+    # Try --user first, fall back to --break-system-packages
+    r = run([sys.executable, get_pip, "--user", "--quiet"], check=False, capture=True)
+    if r.returncode != 0:
+        run([sys.executable, get_pip, "--user", "--break-system-packages", "--quiet"])
+    Path(get_pip).unlink(missing_ok=True)
+
+    result = run([sys.executable, "-m", "pip", "--version"], check=False, capture=True)
+    if result.returncode != 0:
+        err("Could not install pip. Install manually: https://pip.pypa.io/en/stable/installation/")
+
+
 def install_packages():
     header("Installing Python dependencies...")
+    _ensure_pip()
     for pkg in REQUIRED_PACKAGES:
+        import_name = {"pyyaml": "yaml"}.get(pkg, pkg.replace("-", "_"))
         try:
-            __import__(pkg.replace("-", "_"))
+            __import__(import_name)
             ok(f"{pkg} already installed")
         except ImportError:
             print(f"  Installing {pkg}...")
-            run([sys.executable, "-m", "pip", "install", pkg, "--quiet"])
+            result = run(
+                [sys.executable, "-m", "pip", "install", pkg, "--user", "--quiet"],
+                check=False
+            )
+            if result.returncode != 0:
+                # Fallback: --break-system-packages (Ubuntu 23.04+)
+                run([sys.executable, "-m", "pip", "install", pkg,
+                     "--break-system-packages", "--quiet"])
             ok(f"{pkg} installed")
 
 

@@ -132,6 +132,7 @@ SECRET_PATTERNS = [
     ("keyword:value",
      re.compile(
          r'(?i)'
+         r'(?<!\[)'                          # not inside [secret:...] references
          r'(?P<kw>password|passwd|şifre|parola|secret|api[_\s\-]?key|api[_\s\-]?token'
          r'|access[_\s\-]?token|private[_\s\-]?key|auth[_\s\-]?token'
          r'|bearer|webhook|key|token)'
