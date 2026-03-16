@@ -81,15 +81,56 @@ def install_packages():
             ok(f"{pkg} installed")
 
 
-def check_docker():
-    if shutil.which("docker") and shutil.which("docker-compose") or shutil.which("docker"):
+def check_docker() -> bool:
+    if shutil.which("docker"):
         try:
             run(["docker", "compose", "version"], capture=True)
             ok("Docker + Compose found")
             return True
         except Exception:
             pass
-    warn("Docker not found — needed for server deployment")
+
+    system = platform.system()
+    warn("Docker not found — needed for server deployment.")
+
+    if system == "Linux":
+        answer = ask("  Install Docker automatically? (y/n)", "y")
+        if answer.lower() != "y":
+            err("Docker is required. Install it manually and re-run install.py.")
+        print("  Installing Docker...")
+        run(["sh", "-c", "curl -fsSL https://get.docker.com | sh"])
+        # Add current user to docker group
+        user = os.environ.get("USER", "")
+        if user:
+            run(["sudo", "usermod", "-aG", "docker", user], check=False)
+        # Try to activate group without logout via newgrp (best-effort)
+        run(["sudo", "systemctl", "enable", "--now", "docker"], check=False)
+        ok("Docker installed.")
+        warn("If you get a 'permission denied' error, log out and back in, then re-run install.py.")
+        # Re-check with sudo for the rest of this session
+        try:
+            run(["sudo", "docker", "compose", "version"], capture=True)
+            return True
+        except Exception:
+            return False
+
+    elif system == "Darwin":
+        if shutil.which("brew"):
+            answer = ask("  Install Docker via Homebrew? (y/n)", "y")
+            if answer.lower() == "y":
+                print("  Installing Docker...")
+                run(["brew", "install", "--cask", "docker"])
+                run(["open", "-a", "Docker"], check=False)
+                ok("Docker installed. Wait for Docker Desktop to start, then re-run install.py.")
+                sys.exit(0)
+        print(c("  → Download Docker Desktop: https://www.docker.com/products/docker-desktop/", "yellow"))
+        err("Install Docker Desktop and re-run install.py.")
+
+    else:  # Windows
+        print(c("  → Download Docker Desktop: https://www.docker.com/products/docker-desktop/", "yellow"))
+        print("  Install Docker Desktop, start it, then re-run install.py.")
+        err("Docker Desktop required on Windows.")
+
     return False
 
 
