@@ -130,8 +130,12 @@ def check_docker() -> tuple:
         # Permission denied — try with sudo
         r2 = run(["sudo", "docker", "info"], check=False, capture=True)
         if r2.returncode == 0:
-            ok("Docker found (running with sudo)")
-            warn("Add yourself to the docker group to avoid sudo: sudo usermod -aG docker $USER")
+            ok("Docker found (running with sudo for this session)")
+            user = os.environ.get("USER", "")
+            if user:
+                run(["sudo", "usermod", "-aG", "docker", user], check=False)
+                warn(f"Added '{user}' to the docker group.")
+                warn("Log out and back in for passwordless docker access in future sessions.")
             return True, True
 
     system = platform.system()
