@@ -17,9 +17,6 @@ services:
       - OLLAMA_HOST=http://ollama:11434
     tmpfs:
       - /dev/shm
-    depends_on:
-      ollama:
-        condition: service_healthy
     profiles: ["default", "ollama"]
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8765/health"]
