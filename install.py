@@ -119,14 +119,20 @@ def install_packages():
             ok(f"{pkg} installed")
 
 
-def check_docker() -> bool:
+def check_docker() -> tuple:
+    """Returns (available: bool, use_sudo: bool)."""
     if shutil.which("docker"):
-        try:
-            run(["docker", "compose", "version"], capture=True)
+        # Use `docker info` — requires daemon access, unlike `docker compose version`
+        r = run(["docker", "info"], check=False, capture=True)
+        if r.returncode == 0:
             ok("Docker + Compose found")
-            return True
-        except Exception:
-            pass
+            return True, False
+        # Permission denied — try with sudo
+        r2 = run(["sudo", "docker", "info"], check=False, capture=True)
+        if r2.returncode == 0:
+            ok("Docker found (running with sudo)")
+            warn("Add yourself to the docker group to avoid sudo: sudo usermod -aG docker $USER")
+            return True, True
 
     system = platform.system()
     warn("Docker not found — needed for server deployment.")
@@ -141,16 +147,15 @@ def check_docker() -> bool:
         user = os.environ.get("USER", "")
         if user:
             run(["sudo", "usermod", "-aG", "docker", user], check=False)
-        # Try to activate group without logout via newgrp (best-effort)
         run(["sudo", "systemctl", "enable", "--now", "docker"], check=False)
         ok("Docker installed.")
         warn("If you get a 'permission denied' error, log out and back in, then re-run install.py.")
         # Re-check with sudo for the rest of this session
         try:
-            run(["sudo", "docker", "compose", "version"], capture=True)
-            return True
+            run(["sudo", "docker", "info"], capture=True)
+            return True, True
         except Exception:
-            return False
+            return False, False
 
     elif system == "Darwin":
         if shutil.which("brew"):
@@ -169,7 +174,7 @@ def check_docker() -> bool:
         print("  Install Docker Desktop, start it, then re-run install.py.")
         err("Docker Desktop required on Windows.")
 
-    return False
+    return False, False
 
 
 # ── Setup Steps ───────────────────────────────────────────────────────────────
@@ -377,7 +382,7 @@ def copy_watcher(notes_dir: Path, repo_dir: Path) -> None:
     ok(f"watcher.py copied to: {dst}")
 
 
-def deploy_server(notes_dir: Path, server_cfg: dict, master_password: str, recovery_b64: str, config: dict = {}, repo_dir: Path = None) -> None:
+def deploy_server(notes_dir: Path, server_cfg: dict, master_password: str, recovery_b64: str, config: dict = {}, repo_dir: Path = None, use_sudo: bool = False) -> None:
     mode = server_cfg.get("mode")
     compose_dir = (repo_dir if repo_dir else Path(__file__).parent) / "server"
 
@@ -386,10 +391,11 @@ def deploy_server(notes_dir: Path, server_cfg: dict, master_password: str, recov
     ollama_model = ai_cfg.get("ollama_model", "llama3.2:1b")
     profile_flag = ["--profile", "ollama"] if use_ollama else ["--profile", "default"]
     env_flag = ["-e", f"OLLAMA_MODEL={ollama_model}"] if use_ollama else []
+    docker_cmd = ["sudo", "docker"] if use_sudo else ["docker"]
 
     if mode == "local":
         header("Starting local server (Docker)...")
-        run(["docker", "compose", "-f", str(compose_dir / "docker-compose.local.yml")]
+        run(docker_cmd + ["compose", "-f", str(compose_dir / "docker-compose.local.yml")]
             + profile_flag + ["up", "-d", "--build"] + env_flag)
         if use_ollama:
             ok(f"Ollama started. Pulling model '{ollama_model}' in background...")
@@ -489,8 +495,9 @@ def main():
     write_config(notes_dir, config)
     copy_watcher(notes_dir, repo_dir)
 
-    if check_docker():
-        deploy_server(notes_dir, server_cfg, master_password, recovery_b64, config, repo_dir)
+    docker_ok, use_sudo = check_docker()
+    if docker_ok:
+        deploy_server(notes_dir, server_cfg, master_password, recovery_b64, config, repo_dir, use_sudo)
     else:
         warn("Docker not found. Install Docker and run 'python install.py --deploy-only'.")
 
